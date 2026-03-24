@@ -9,7 +9,7 @@ http.route({
   method: "POST",
   handler: httpAction(async (ctx, request) => {
     const body = await request.json();
-    const { email, bedrijfsnaam, onderwerp, verzondOp, emailVerzonden, type, foutmelding } = body;
+    const { email, onderwerp, verzondOp, emailVerzonden, type, foutmelding } = body;
 
     // Zoek de lead op basis van email
     const lead = await ctx.runQuery(

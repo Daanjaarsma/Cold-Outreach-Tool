@@ -1,7 +1,6 @@
 import { useState, useCallback } from "react";
 import { useQuery, useMutation } from "convex/react";
 import { api } from "../convex/_generated/api";
-import type { Doc } from "../convex/_generated/dataModel";
 import { PasswordGate } from "./components/PasswordGate";
 import { StatsOverzicht } from "./components/StatsOverzicht";
 import { LeadZoekForm } from "./components/LeadZoekForm";
@@ -11,8 +10,6 @@ import { berekenLeadScore, SECTOR_WEBHOOK_MAP } from "./lib/utils";
 
 const WEBHOOK_URL =
   "https://praedixautomations.app.n8n.cloud/webhook/4ed97bf4-31bd-446a-adcf-d3521166ad1b";
-
-type Lead = Doc<"leads">;
 
 function App() {
   const [isAuthed, setIsAuthed] = useState(

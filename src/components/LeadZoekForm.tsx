@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { ShoppingCart, Users, Search, MapPin, Loader2 } from "lucide-react";
-import { cn, SUB_SECTORS, SECTOR_WEBHOOK_MAP, BEDRIJFSGROOTTES } from "../lib/utils";
+import { cn, SUB_SECTORS, BEDRIJFSGROOTTES } from "../lib/utils";
 
 interface LeadZoekFormProps {
   onSearch: (params: {

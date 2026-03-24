@@ -8,7 +8,6 @@ import {
   Phone,
   Mail,
   Globe,
-  Copy,
   Check,
   Download,
   Trash2,
