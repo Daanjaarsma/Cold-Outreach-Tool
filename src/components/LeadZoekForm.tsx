@@ -2,12 +2,15 @@ import { useState } from "react";
 import { ShoppingCart, Users, Search, MapPin, Loader2 } from "lucide-react";
 import { cn, SUB_SECTORS, BEDRIJFSGROOTTES } from "../lib/utils";
 
+const LEAD_COUNTS = [20, 50, 100];
+
 interface LeadZoekFormProps {
   onSearch: (params: {
     sector: string;
     subSector: string;
     location: string;
     bedrijfsgrootte: string;
+    leadCount: number;
   }) => Promise<void>;
   isLoading: boolean;
 }
@@ -17,6 +20,7 @@ export function LeadZoekForm({ onSearch, isLoading }: LeadZoekFormProps) {
   const [subSector, setSubSector] = useState("");
   const [location, setLocation] = useState("");
   const [bedrijfsgrootte, setBedrijfsgrootte] = useState("");
+  const [leadCount, setLeadCount] = useState(20);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -26,6 +30,7 @@ export function LeadZoekForm({ onSearch, isLoading }: LeadZoekFormProps) {
       subSector,
       location: location.trim(),
       bedrijfsgrootte,
+      leadCount,
     });
   };
 
@@ -146,6 +151,29 @@ export function LeadZoekForm({ onSearch, isLoading }: LeadZoekFormProps) {
               )}
             >
               {size}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <div>
+        <label className="text-sm font-medium text-white/60 mb-2 block">
+          Aantal leads
+        </label>
+        <div className="flex flex-wrap gap-2">
+          {LEAD_COUNTS.map((count) => (
+            <button
+              key={count}
+              type="button"
+              onClick={() => setLeadCount(count)}
+              className={cn(
+                "px-3 py-1.5 rounded-lg text-sm font-medium transition-all cursor-pointer",
+                leadCount === count
+                  ? "bg-[#31edae] text-black"
+                  : "bg-white/[0.06] text-white/60 hover:bg-white/[0.1]"
+              )}
+            >
+              {count}
             </button>
           ))}
         </div>

@@ -7,6 +7,16 @@
         "--project-dir",
         "/Users/daanjaarsma/Praedix Lead Outreach"
       ]
+    },
+    "apify": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@apify/actors-mcp-server"
+      ],
+      "env": {
+        "APIFY_TOKEN": "${APIFY_TOKEN}"
+      }
     }
   }
 }

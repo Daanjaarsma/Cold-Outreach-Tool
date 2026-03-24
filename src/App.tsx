@@ -6,10 +6,7 @@ import { StatsOverzicht } from "./components/StatsOverzicht";
 import { LeadZoekForm } from "./components/LeadZoekForm";
 import { LeadsResultaat } from "./components/LeadsResultaat";
 import { OutreachPanel } from "./components/OutreachPanel";
-import { berekenLeadScore, SECTOR_WEBHOOK_MAP } from "./lib/utils";
-
-const WEBHOOK_URL =
-  "https://praedixautomations.app.n8n.cloud/webhook/4ed97bf4-31bd-446a-adcf-d3521166ad1b";
+import { berekenLeadScore } from "./lib/utils";
 
 function App() {
   const [isAuthed, setIsAuthed] = useState(
@@ -27,26 +24,22 @@ function App() {
     subSector: string;
     location: string;
     bedrijfsgrootte: string;
+    leadCount: number;
   }) => {
     setIsLoading(true);
     setError(null);
     setSelectedIds(new Set());
 
     try {
-      const webhookSector =
-        SECTOR_WEBHOOK_MAP[params.sector] || params.sector;
-
       const payload = {
         location: params.location,
-        sector: webhookSector,
+        sector: params.sector,
         subSector: params.subSector || undefined,
-        leadCount: 40,
-        reviews: true,
+        leadCount: params.leadCount,
         bedrijfsgrootte: params.bedrijfsgrootte || undefined,
-        groeiIndicatie: false,
       };
 
-      const response = await fetch(WEBHOOK_URL, {
+      const response = await fetch("/api/scrape-leads", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
@@ -68,7 +61,7 @@ function App() {
         })
         .map((l: any) => ({
           bedrijfsnaam: l.name || l.title || l.bedrijfsnaam || "Onbekend",
-          categorie: l.bedrijfscategorie || l.categoryName || l.categorie || webhookSector,
+          categorie: l.bedrijfscategorie || l.categoryName || l.categorie || params.sector,
           subCategorie: l.subSector || params.subSector || undefined,
           stad: l.city || l.stad || params.location,
           telefoon: l.telefoonnummer || l.phoneUnformatted || l.phone || l.telefoon || undefined,

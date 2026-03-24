@@ -4,7 +4,7 @@ import { api } from "../../convex/_generated/api";
 import type { Doc } from "../../convex/_generated/dataModel";
 import { Send, Loader2, CheckCircle2, AlertCircle } from "lucide-react";
 
-const OUTREACH_WEBHOOK = "https://praedixautomations.app.n8n.cloud/webhook/ecommerce-cold-outreach";
+const OUTREACH_URL = "/api/send-outreach";
 
 type Lead = Doc<"leads">;
 
@@ -44,7 +44,7 @@ export function OutreachPanel({ selectedLeads, onDone }: OutreachPanelProps) {
         })),
       };
 
-      const response = await fetch(OUTREACH_WEBHOOK, {
+      const response = await fetch(OUTREACH_URL, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
