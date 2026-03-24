@@ -1,0 +1,12 @@
+{
+  "mcpServers": {
+    "convex-cold-outreach": {
+      "command": "npx",
+      "args": [
+        "@anthropic-ai/claude-code-convex-mcp@latest",
+        "--project-dir",
+        "/Users/daanjaarsma/Praedix Lead Outreach"
+      ]
+    }
+  }
+}

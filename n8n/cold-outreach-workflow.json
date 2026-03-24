@@ -1,0 +1,265 @@
+{
+  "name": "E-commerce Cold Outreach",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "ecommerce-cold-outreach",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "webhook-trigger",
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [250, 300],
+      "webhookId": "ecommerce-cold-outreach"
+    },
+    {
+      "parameters": {
+        "jsCode": "const input = $input.first().json;\nconst leads = input.body?.leads || input.leads || [];\n\n// Filter leads zonder email en dedupliceer\nconst seen = new Set();\nconst validLeads = [];\nlet filtered = 0;\n\nfor (const lead of leads) {\n  if (!lead.email || !lead.email.includes('@')) {\n    filtered++;\n    continue;\n  }\n  if (!lead.bedrijfsnaam) {\n    filtered++;\n    continue;\n  }\n  const key = lead.email.toLowerCase().trim();\n  if (seen.has(key)) {\n    filtered++;\n    continue;\n  }\n  seen.add(key);\n  validLeads.push(lead);\n}\n\n// Max 50 per dag\nconst batch = validLeads.slice(0, 50);\n\nreturn batch.map(lead => ({ json: { ...lead, _totalInput: leads.length, _validCount: batch.length, _filtered: filtered } }));"
+      },
+      "id": "filter-dedup",
+      "name": "Filter & Dedup",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [470, 300]
+    },
+    {
+      "parameters": {
+        "batchSize": 5,
+        "options": {}
+      },
+      "id": "split-batches",
+      "name": "Split In Batches",
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [690, 300]
+    },
+    {
+      "parameters": {
+        "amount": 60,
+        "unit": "seconds"
+      },
+      "id": "wait-between",
+      "name": "Wacht 60s",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [690, 500]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.anthropic.com/v1/messages",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "x-api-key",
+              "value": "={{ $credentials.anthropicApi?.apiKey || $env.ANTHROPIC_API_KEY }}"
+            },
+            {
+              "name": "anthropic-version",
+              "value": "2023-06-01"
+            },
+            {
+              "name": "content-type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"model\": \"claude-sonnet-4-20250514\",\n  \"max_tokens\": 1024,\n  \"system\": \"Je bent een ervaren B2B sales professional die koude acquisitie emails schrijft namens Praedix, een AI-bedrijf dat het Nederlandse MKB helpt met AI-automatiseringen.\\n\\nPraedix biedt AI-automatiseringen aan vanaf €499 (implementatie) + €49/maand (support).\\n\\nSpecifieke AI-kansen voor e-commerce bedrijven:\\n- Klantenservice chatbot: beantwoordt automatisch 80% van veelgestelde vragen\\n- Productverwerking: automatische productbeschrijvingen, categorisering en SEO-optimalisatie\\n- Facturatieprocessen: automatische facturatie, herinneringen en boekhouding-integratie\\n- Orderverwerking: automatische orderbevestigingen en track-and-trace updates\\n- Klantdata-analyse: inzichten uit bestelhistorie en klantgedrag\\n\\nRegels:\\n1. Schrijf in correct Nederlands, gebruik 'je/jouw' (niet 'u')\\n2. Max 150 woorden\\n3. Professioneel maar informeel en persoonlijk\\n4. Begin met een bedrijfsspecifiek inzicht (gebaseerd op de bedrijfsnaam en website)\\n5. Noem 1-2 concrete AI-kansen relevant voor dit specifieke bedrijf\\n6. Eindig met een CTA: gratis consult boeken via https://www.praedix-ai-scan.com/consult\\n7. Onderteken met: Met vriendelijke groet,\\nHet Praedix team\\n8. Gebruik GEEN markdown formatting (geen **, geen ##, geen bullets)\\n9. Schrijf de email als plain text met alinea's gescheiden door lege regels\",\n  \"messages\": [\n    {\n      \"role\": \"user\",\n      \"content\": \"Schrijf een koude acquisitie email voor dit e-commerce bedrijf:\\n\\nBedrijfsnaam: {{ $json.bedrijfsnaam }}\\nWebsite: {{ $json.website }}\\nStad: {{ $json.stad }}\\nCategorie: {{ $json.categorie }}\\nSub-categorie: {{ $json.subCategorie }}\"\n    }\n  ]\n}",
+        "options": {}
+      },
+      "id": "claude-email",
+      "name": "Claude Email Generatie",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [910, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "const response = $input.first().json;\nconst prevData = $('Split In Batches').first().json;\n\nconst text = response.content?.[0]?.text || '';\n\nconst subjectMatch = text.match(/ONDERWERP:\\s*(.+)/);\nconst bodyMatch = text.match(/BODY:\\s*([\\s\\S]+)/);\n\nconst subject = subjectMatch ? subjectMatch[1].trim() : `AI-kansen voor ${prevData.bedrijfsnaam}`;\nlet body = bodyMatch ? bodyMatch[1].trim() : text;\n\n// Verwijder eventuele markdown\nbody = body.replace(/\\*\\*/g, '').replace(/^#+\\s/gm, '');\n\nconst htmlBody = body.replace(/\\n\\n/g, '<br><br>').replace(/\\n/g, '<br>');\n\nconst html = `<!DOCTYPE html>\n<html>\n<head><meta charset=\"utf-8\"></head>\n<body style=\"font-family: 'Poppins', Arial, sans-serif; color: #333; line-height: 1.6; max-width: 600px; margin: 0 auto; padding: 20px;\">\n  ${htmlBody}\n  <br><br>\n  <hr style=\"border: none; border-top: 1px solid #e0e0e0; margin: 20px 0;\">\n  <table style=\"width: 100%;\">\n    <tr>\n      <td style=\"padding: 10px 0;\">\n        <strong style=\"color: #1e1e1e;\">Praedix</strong><br>\n        <span style=\"color: #666; font-size: 13px;\">AI-automatiseringen voor het MKB</span><br>\n        <a href=\"https://www.praedix.io\" style=\"color: #31edae; font-size: 13px; text-decoration: none;\">www.praedix.io</a>\n      </td>\n    </tr>\n  </table>\n  <p style=\"font-size: 11px; color: #999; margin-top: 20px;\">\n    Je ontvangt deze email omdat we denken dat AI-automatiseringen waardevol kunnen zijn voor jouw bedrijf.\n    Wil je geen emails meer ontvangen? Stuur een reply met \"uitschrijven\".\n  </p>\n</body>\n</html>`;\n\nreturn [{\n  json: {\n    ...prevData,\n    emailSubject: subject,\n    emailHtml: html,\n    emailPlainText: body\n  }\n}];"
+      },
+      "id": "parse-email",
+      "name": "Parse Email",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1130, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.resend.com/emails",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "={{ 'Bearer ' + ($credentials.resendApi?.apiKey || $env.RESEND_API_KEY) }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"from\": \"Praedix <info@praedix.io>\",\n  \"to\": [\"{{ $json.email }}\"],\n  \"subject\": \"{{ $json.emailSubject }}\",\n  \"html\": {{ JSON.stringify($json.emailHtml) }},\n  \"reply_to\": \"info@praedix.io\"\n}",
+        "options": {}
+      },
+      "id": "resend-email",
+      "name": "Verstuur via Resend",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1350, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://qualified-herring-111.eu-west-1.convex.site/logOutreach",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"email\": \"{{ $json.email }}\",\n  \"bedrijfsnaam\": \"{{ $json.bedrijfsnaam }}\",\n  \"onderwerp\": \"{{ $json.emailSubject }}\",\n  \"verzondOp\": {{ Date.now() }},\n  \"emailVerzonden\": true,\n  \"type\": \"cold\"\n}",
+        "options": {}
+      },
+      "id": "log-convex",
+      "name": "Log naar Convex",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1570, 300]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={\n  \"success\": true,\n  \"totalLeads\": {{ $('Filter & Dedup').first().json._totalInput }},\n  \"sentCount\": {{ $('Filter & Dedup').first().json._validCount }},\n  \"filtered\": {{ $('Filter & Dedup').first().json._filtered }}\n}",
+        "options": {}
+      },
+      "id": "respond-webhook",
+      "name": "Respond to Webhook",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [1790, 300]
+    }
+  ],
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Filter & Dedup",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Filter & Dedup": {
+      "main": [
+        [
+          {
+            "node": "Split In Batches",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Split In Batches": {
+      "main": [
+        [
+          {
+            "node": "Wacht 60s",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Claude Email Generatie",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Wacht 60s": {
+      "main": [
+        [
+          {
+            "node": "Split In Batches",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Claude Email Generatie": {
+      "main": [
+        [
+          {
+            "node": "Parse Email",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Email": {
+      "main": [
+        [
+          {
+            "node": "Verstuur via Resend",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Verstuur via Resend": {
+      "main": [
+        [
+          {
+            "node": "Log naar Convex",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Log naar Convex": {
+      "main": [
+        [
+          {
+            "node": "Respond to Webhook",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "tags": [
+    {
+      "name": "cold-outreach"
+    },
+    {
+      "name": "e-commerce"
+    }
+  ]
+}
