@@ -9,6 +9,7 @@
  */
 
 import type * as http from "../http.js";
+import type * as httpHelpers from "../httpHelpers.js";
 import type * as leads from "../leads.js";
 import type * as outreach from "../outreach.js";
 
@@ -20,6 +21,7 @@ import type {
 
 declare const fullApi: ApiFromModules<{
   http: typeof http;
+  httpHelpers: typeof httpHelpers;
   leads: typeof leads;
   outreach: typeof outreach;
 }>;

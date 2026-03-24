@@ -5,7 +5,6 @@ import { PasswordGate } from "./components/PasswordGate";
 import { StatsOverzicht } from "./components/StatsOverzicht";
 import { LeadZoekForm } from "./components/LeadZoekForm";
 import { LeadsResultaat } from "./components/LeadsResultaat";
-import { OutreachPanel } from "./components/OutreachPanel";
 import { berekenLeadScore } from "./lib/utils";
 
 function App() {
@@ -113,8 +112,6 @@ function App() {
     setSelectedIds(new Set());
   }, []);
 
-  const selectedLeads = leads.filter((l) => selectedIds.has(l._id));
-
   if (!isAuthed) {
     return <PasswordGate onAuth={() => setIsAuthed(true)} />;
   }
@@ -171,13 +168,6 @@ function App() {
             onClearSelection={clearSelection}
           />
 
-          {/* Outreach Panel */}
-          {selectedIds.size > 0 && (
-            <OutreachPanel
-              selectedLeads={selectedLeads}
-              onDone={clearSelection}
-            />
-          )}
         </div>
       </div>
     </div>

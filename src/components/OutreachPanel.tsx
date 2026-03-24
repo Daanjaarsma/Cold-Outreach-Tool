@@ -22,10 +22,11 @@ export function OutreachPanel({ selectedLeads, onDone }: OutreachPanelProps) {
 
   const markBenaderd = useMutation(api.leads.markBenaderd);
 
-  const leadsMetEmail = selectedLeads.filter((l) => l.email);
-  const ecommerceLeads = leadsMetEmail.filter((l) => l.sector === "e-commerce");
+  const outreachLeads = selectedLeads.filter(
+    (l) => l.email && (l.sector === "e-commerce" || l.sector === "recruitment")
+  );
 
-  if (ecommerceLeads.length === 0) return null;
+  if (outreachLeads.length === 0) return null;
 
   const handleSend = async () => {
     setIsSending(true);
@@ -33,7 +34,7 @@ export function OutreachPanel({ selectedLeads, onDone }: OutreachPanelProps) {
 
     try {
       const payload = {
-        leads: ecommerceLeads.map((l) => ({
+        leads: outreachLeads.map((l) => ({
           bedrijfsnaam: l.bedrijfsnaam,
           email: l.email,
           website: l.website || "",
@@ -53,12 +54,12 @@ export function OutreachPanel({ selectedLeads, onDone }: OutreachPanelProps) {
       if (response.ok) {
         // Markeer leads als benaderd in Convex
         await markBenaderd({
-          ids: ecommerceLeads.map((l) => l._id),
+          ids: outreachLeads.map((l) => l._id),
         });
 
         setResult({
           status: "success",
-          message: `${ecommerceLeads.length} outreach email${ecommerceLeads.length !== 1 ? "s" : ""} verstuurd`,
+          message: `${outreachLeads.length} outreach email${outreachLeads.length !== 1 ? "s" : ""} verstuurd`,
         });
         setTimeout(() => {
           onDone();
@@ -88,11 +89,11 @@ export function OutreachPanel({ selectedLeads, onDone }: OutreachPanelProps) {
         </div>
         <div>
           <p className="text-sm font-medium text-white">
-            {ecommerceLeads.length} e-commerce lead
-            {ecommerceLeads.length !== 1 ? "s" : ""} geselecteerd met email
+            {outreachLeads.length} lead
+            {outreachLeads.length !== 1 ? "s" : ""} geselecteerd met email
           </p>
           <p className="text-xs text-white/40">
-            Cold outreach emails worden via n8n verstuurd
+            Gepersonaliseerde emails worden gegenereerd met AI en verstuurd via Resend
           </p>
         </div>
       </div>

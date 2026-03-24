@@ -1,9 +1,10 @@
 import { httpRouter } from "convex/server";
 import { httpAction } from "./_generated/server";
+import { internal } from "./_generated/api";
 
 const http = httpRouter();
 
-// POST /logOutreach — Aangeroepen door n8n na het versturen van een email
+// POST /logOutreach — Aangeroepen door /api/send-outreach na het versturen van een email
 http.route({
   path: "/logOutreach",
   method: "POST",
@@ -11,43 +12,16 @@ http.route({
     const body = await request.json();
     const { email, onderwerp, verzondOp, emailVerzonden, type, foutmelding } = body;
 
-    // Zoek de lead op basis van email
-    const lead = await ctx.runQuery(
-      // @ts-expect-error internal query
-      async (ctx: any) => {
-        const leads = await ctx.db
-          .query("leads")
-          .withIndex("by_email", (q: any) => q.eq("email", email))
-          .collect();
-        return leads.find((l: any) => !l.verwijderd) ?? null;
-      }
-    );
+    const result = await ctx.runMutation(internal.httpHelpers.logOutreach, {
+      email: email ?? "",
+      onderwerp: onderwerp ?? undefined,
+      verzondOp: verzondOp ?? Date.now(),
+      emailVerzonden: emailVerzonden ?? true,
+      type: type ?? "cold",
+      foutmelding: foutmelding ?? undefined,
+    });
 
-    if (lead) {
-      await ctx.runMutation(
-        // @ts-expect-error internal mutation
-        async (ctx: any) => {
-          await ctx.db.insert("outreachLog", {
-            leadId: lead._id,
-            emailVerzonden: emailVerzonden ?? true,
-            onderwerp: onderwerp ?? null,
-            verzondOp: verzondOp ?? Date.now(),
-            type: type ?? "cold",
-            foutmelding: foutmelding ?? null,
-            verwijderd: false,
-          });
-
-          // Update lead status
-          await ctx.db.patch(lead._id, {
-            status: "benaderd",
-            laatstBenaderd: Date.now(),
-            aantalKeerBenaderd: lead.aantalKeerBenaderd + 1,
-          });
-        }
-      );
-    }
-
-    return new Response(JSON.stringify({ success: true, leadFound: !!lead }), {
+    return new Response(JSON.stringify({ success: true, leadFound: result.leadFound }), {
       status: 200,
       headers: { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" },
     });
@@ -61,21 +35,9 @@ http.route({
   handler: httpAction(async (ctx, request) => {
     const { emails } = await request.json();
 
-    const contacted = await ctx.runQuery(
-      // @ts-expect-error internal query
-      async (ctx: any) => {
-        const results: string[] = [];
-        for (const email of emails) {
-          const leads = await ctx.db
-            .query("leads")
-            .withIndex("by_email", (q: any) => q.eq("email", email))
-            .collect();
-          const found = leads.find((l: any) => !l.verwijderd && l.status !== "nieuw");
-          if (found) results.push(email);
-        }
-        return results;
-      }
-    );
+    const contacted: string[] = await ctx.runQuery(internal.httpHelpers.checkContacted, {
+      emails: emails ?? [],
+    });
 
     return new Response(JSON.stringify({ contacted }), {
       status: 200,

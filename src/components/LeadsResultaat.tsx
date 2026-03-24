@@ -1,16 +1,19 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useRef, useEffect } from "react";
 import { useMutation } from "convex/react";
 import { api } from "../../convex/_generated/api";
 import type { Doc } from "../../convex/_generated/dataModel";
 import {
   ChevronUp,
   ChevronDown,
+  Plus,
   Phone,
   Mail,
   Globe,
+  Copy,
   Check,
   Download,
   Trash2,
+  X,
 } from "lucide-react";
 import { cn, formatDutchPhone, STATUSES, generateCSV } from "../lib/utils";
 
@@ -26,6 +29,136 @@ interface LeadsResultaatProps {
   onClearSelection: () => void;
 }
 
+function ContactPopup({
+  lead,
+  onClose,
+}: {
+  lead: Lead;
+  onClose: () => void;
+}) {
+  const popupRef = useRef<HTMLDivElement>(null);
+  const [copiedField, setCopiedField] = useState<string | null>(null);
+
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (popupRef.current && !popupRef.current.contains(e.target as Node)) {
+        onClose();
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, [onClose]);
+
+  const copyToClipboard = async (text: string, field: string) => {
+    await navigator.clipboard.writeText(text);
+    setCopiedField(field);
+    setTimeout(() => setCopiedField(null), 1500);
+  };
+
+  const hasContact = lead.telefoon || lead.email || lead.website;
+
+  return (
+    <div
+      ref={popupRef}
+      className="absolute z-50 top-full right-0 mt-1 bg-[#2a2a2a] border border-white/[0.1] rounded-xl p-4 shadow-xl min-w-[280px]"
+    >
+      <div className="flex items-center justify-between mb-3">
+        <p className="text-xs font-semibold text-white/70 uppercase tracking-wider">
+          Contactgegevens
+        </p>
+        <button
+          onClick={onClose}
+          className="text-white/30 hover:text-white/60 transition-colors cursor-pointer"
+        >
+          <X className="w-3.5 h-3.5" />
+        </button>
+      </div>
+
+      {!hasContact && (
+        <p className="text-xs text-white/30">Geen contactgegevens beschikbaar</p>
+      )}
+
+      <div className="flex flex-col gap-2.5">
+        {lead.telefoon && (
+          <div className="flex items-center justify-between gap-3">
+            <div className="flex items-center gap-2 min-w-0">
+              <Phone className="w-3.5 h-3.5 text-[#31edae] shrink-0" />
+              <a
+                href={`tel:${lead.telefoon}`}
+                className="text-sm text-white hover:text-[#31edae] transition-colors truncate"
+              >
+                {formatDutchPhone(lead.telefoon)}
+              </a>
+            </div>
+            <button
+              onClick={() => copyToClipboard(lead.telefoon!, "telefoon")}
+              className="text-white/30 hover:text-white/60 transition-colors cursor-pointer shrink-0"
+              title="Kopieer telefoonnummer"
+            >
+              {copiedField === "telefoon" ? (
+                <Check className="w-3.5 h-3.5 text-[#31edae]" />
+              ) : (
+                <Copy className="w-3.5 h-3.5" />
+              )}
+            </button>
+          </div>
+        )}
+
+        {lead.email && (
+          <div className="flex items-center justify-between gap-3">
+            <div className="flex items-center gap-2 min-w-0">
+              <Mail className="w-3.5 h-3.5 text-[#31edae] shrink-0" />
+              <span className="text-sm text-white truncate">{lead.email}</span>
+            </div>
+            <button
+              onClick={() => copyToClipboard(lead.email!, "email")}
+              className="text-white/30 hover:text-white/60 transition-colors cursor-pointer shrink-0"
+              title="Kopieer e-mailadres"
+            >
+              {copiedField === "email" ? (
+                <Check className="w-3.5 h-3.5 text-[#31edae]" />
+              ) : (
+                <Copy className="w-3.5 h-3.5" />
+              )}
+            </button>
+          </div>
+        )}
+
+        {lead.website && (
+          <div className="flex items-center justify-between gap-3">
+            <div className="flex items-center gap-2 min-w-0">
+              <Globe className="w-3.5 h-3.5 text-[#31edae] shrink-0" />
+              <a
+                href={
+                  lead.website.startsWith("http")
+                    ? lead.website
+                    : `https://${lead.website}`
+                }
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-sm text-white hover:text-[#31edae] transition-colors truncate"
+              >
+                {lead.website.replace(/^https?:\/\//, "").replace(/\/$/, "")}
+              </a>
+            </div>
+            <button
+              onClick={() => copyToClipboard(lead.website!, "website")}
+              className="text-white/30 hover:text-white/60 transition-colors cursor-pointer shrink-0"
+              title="Kopieer website URL"
+            >
+              {copiedField === "website" ? (
+                <Check className="w-3.5 h-3.5 text-[#31edae]" />
+              ) : (
+                <Copy className="w-3.5 h-3.5" />
+              )}
+            </button>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 export function LeadsResultaat({
   leads,
   selectedIds,
@@ -35,7 +168,7 @@ export function LeadsResultaat({
 }: LeadsResultaatProps) {
   const [sortCol, setSortCol] = useState<SortCol>("leadScore");
   const [sortDir, setSortDir] = useState<SortDir>("desc");
-  const [copiedEmail, setCopiedEmail] = useState<string | null>(null);
+  const [openContactId, setOpenContactId] = useState<string | null>(null);
 
   const updateStatus = useMutation(api.leads.updateStatus);
   const softDelete = useMutation(api.leads.softDelete);
@@ -68,12 +201,6 @@ export function LeadsResultaat({
       setSortCol(col);
       setSortDir(col === "bedrijfsnaam" || col === "stad" ? "asc" : "desc");
     }
-  };
-
-  const copyEmail = async (email: string) => {
-    await navigator.clipboard.writeText(email);
-    setCopiedEmail(email);
-    setTimeout(() => setCopiedEmail(null), 1500);
   };
 
   const getScoreColor = (score: number) => {
@@ -233,42 +360,33 @@ export function LeadsResultaat({
                     {lead.bedrijfsgrootte || "-"}
                   </td>
                   <td className="p-3">
-                    <div className="flex items-center gap-1.5">
-                      {lead.telefoon && (
-                        <a
-                          href={`tel:${lead.telefoon}`}
-                          className="text-white/40 hover:text-[#31edae] transition-colors"
-                          title={formatDutchPhone(lead.telefoon)}
-                        >
-                          <Phone className="w-3.5 h-3.5" />
-                        </a>
-                      )}
-                      {lead.email && (
-                        <button
-                          onClick={() => copyEmail(lead.email!)}
-                          className="text-white/40 hover:text-[#31edae] transition-colors cursor-pointer"
-                          title={lead.email}
-                        >
-                          {copiedEmail === lead.email ? (
-                            <Check className="w-3.5 h-3.5 text-[#31edae]" />
-                          ) : (
-                            <Mail className="w-3.5 h-3.5" />
+                    <div className="relative">
+                      <button
+                        onClick={() =>
+                          setOpenContactId(
+                            openContactId === lead._id ? null : lead._id
+                          )
+                        }
+                        className={cn(
+                          "w-7 h-7 rounded-lg flex items-center justify-center transition-all cursor-pointer",
+                          openContactId === lead._id
+                            ? "bg-[#31edae] text-black"
+                            : "bg-white/[0.06] text-white/40 hover:bg-white/[0.12] hover:text-white/70"
+                        )}
+                        title="Contactgegevens bekijken"
+                      >
+                        <Plus
+                          className={cn(
+                            "w-3.5 h-3.5 transition-transform",
+                            openContactId === lead._id && "rotate-45"
                           )}
-                        </button>
-                      )}
-                      {lead.website && (
-                        <a
-                          href={
-                            lead.website.startsWith("http")
-                              ? lead.website
-                              : `https://${lead.website}`
-                          }
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="text-white/40 hover:text-[#31edae] transition-colors"
-                        >
-                          <Globe className="w-3.5 h-3.5" />
-                        </a>
+                        />
+                      </button>
+                      {openContactId === lead._id && (
+                        <ContactPopup
+                          lead={lead}
+                          onClose={() => setOpenContactId(null)}
+                        />
                       )}
                     </div>
                   </td>

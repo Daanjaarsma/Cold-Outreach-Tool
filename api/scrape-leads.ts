@@ -5,16 +5,14 @@ const APIFY_BASE = "https://api.apify.com/v2";
 // Google Maps Scraper actor ID — standaard Apify marketplace actor
 const GMAPS_ACTOR_ID = "compass/crawler-google-places";
 
-// Custom Email Scraper actor ID — wordt ingevuld na deploy op Apify
-// Vervang dit met je eigen actor ID na het deployen van apify-email-scraper/
-const EMAIL_SCRAPER_ACTOR_ID = "YOUR_APIFY_USERNAME/praedix-cold-outreach-enricher";
+// Custom Email Scraper actor ID — via env var of hardcoded fallback
+const EMAIL_SCRAPER_ACTOR_ID = process.env.APIFY_EMAIL_SCRAPER_ID || "";
 
 interface ScrapeParams {
   location: string;
   sector: string;
   subSector?: string;
   leadCount: number;
-  bedrijfsgrootte?: string;
 }
 
 async function waitForRun(runId: string, token: string, maxWaitMs = 240000): Promise<string> {
@@ -46,6 +44,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   const { location, sector, subSector, leadCount } = req.body as ScrapeParams;
 
+  if (!EMAIL_SCRAPER_ACTOR_ID) {
+    console.warn("[CONFIG] APIFY_EMAIL_SCRAPER_ID niet gezet — email verrijking is uitgeschakeld");
+  }
+
   if (!location || !sector) {
     return res.status(400).json({ error: "Locatie en sector zijn verplicht" });
   }
@@ -64,7 +66,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     console.log(`[STAP 1] Google Maps zoeken: "${searchQuery}" (max ${leadCount} leads)`);
 
     const gmapsRes = await fetch(
-      `${APIFY_BASE}/acts/${GMAPS_ACTOR_ID}/runs?token=${apifyToken}`,
+      `${APIFY_BASE}/acts/${GMAPS_ACTOR_ID.replace("/", "~")}/runs?token=${apifyToken}`,
       {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -118,7 +120,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     let emailMap: Record<string, { email: string | null; phone: string | null }> = {};
 
-    if (leadsMetWebsite.length > 0 && !EMAIL_SCRAPER_ACTOR_ID.startsWith("YOUR_")) {
+    if (leadsMetWebsite.length > 0 && EMAIL_SCRAPER_ACTOR_ID) {
       const emailInput = leadsMetWebsite.map((l: any) => ({
         leadId: l.leadId,
         website: l.website,
@@ -128,7 +130,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       }));
 
       const emailRes = await fetch(
-        `${APIFY_BASE}/acts/${EMAIL_SCRAPER_ACTOR_ID}/runs?token=${apifyToken}`,
+        `${APIFY_BASE}/acts/${EMAIL_SCRAPER_ACTOR_ID.replace("/", "~")}/runs?token=${apifyToken}`,
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -149,20 +151,31 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           const emailStatus = await waitForRun(emailRunId, apifyToken);
           if (emailStatus === "SUCCEEDED") {
             const emailData = await getDatasetItems(emailRunId, apifyToken);
-            for (const item of emailData) {
-              if (item.leadId) {
-                emailMap[item.leadId] = {
-                  email: item.primaryEmail || null,
-                  phone: item.phone || null,
-                };
+            if (!Array.isArray(emailData)) {
+              console.error("[STAP 3 FOUT] Onverwacht response formaat van email scraper");
+            } else {
+              for (const item of emailData) {
+                if (item.leadId) {
+                  emailMap[item.leadId] = {
+                    email: item.primaryEmail || null,
+                    phone: item.phone || null,
+                  };
+                } else {
+                  console.warn("[STAP 3] Email resultaat zonder leadId:", item.website || "onbekend");
+                }
               }
+              console.log(`[STAP 3 KLAAR] ${Object.keys(emailMap).length} emails gevonden`);
             }
-            console.log(`[STAP 3 KLAAR] ${Object.keys(emailMap).length} emails gevonden`);
+          } else {
+            console.error(`[STAP 3 FOUT] Email scraper status: ${emailStatus}`);
           }
         }
+      } else {
+        const errText = await emailRes.text().catch(() => "Onbekende fout");
+        console.error(`[STAP 3 FOUT] Email scraper API fout (${emailRes.status}): ${errText}`);
       }
-    } else if (EMAIL_SCRAPER_ACTOR_ID.startsWith("YOUR_")) {
-      console.log("[STAP 3 OVERGESLAGEN] Email scraper actor ID niet geconfigureerd");
+    } else {
+      console.log("[STAP 3 OVERGESLAGEN] APIFY_EMAIL_SCRAPER_ID niet geconfigureerd");
     }
 
     // ── STAP 4: Combineer resultaten ──

@@ -3,6 +3,7 @@ import Anthropic from "@anthropic-ai/sdk";
 import { Resend } from "resend";
 
 const CONVEX_SITE_URL =
+  process.env.CONVEX_SITE_URL ||
   process.env.VITE_CONVEX_SITE_URL ||
   "https://qualified-herring-111.eu-west-1.convex.site";
 
@@ -10,23 +11,38 @@ const SYSTEM_PROMPT = `Je bent een ervaren B2B sales professional die koude acqu
 
 Praedix biedt AI-automatiseringen aan vanaf €499 (implementatie) + €49/maand (support).
 
-Specifieke AI-kansen voor e-commerce bedrijven:
+Specifieke AI-kansen per sector:
+
+E-COMMERCE:
 - Klantenservice chatbot: beantwoordt automatisch 80% van veelgestelde vragen
 - Productverwerking: automatische productbeschrijvingen, categorisering en SEO-optimalisatie
 - Facturatieprocessen: automatische facturatie, herinneringen en boekhouding-integratie
 - Orderverwerking: automatische orderbevestigingen en track-and-trace updates
 - Klantdata-analyse: inzichten uit bestelhistorie en klantgedrag
 
+RECRUITMENT:
+- CV-screening: automatisch CV's beoordelen en ranken op basis van vacature-eisen
+- Kandidaat-matching: AI-gedreven matching tussen kandidaten en vacatures
+- Automatische opvolging: geautomatiseerde follow-up emails naar kandidaten
+- Vacatureteksten: AI-gegenereerde vacatureteksten op basis van functie-eisen
+- Marktanalyse: inzichten uit arbeidsmarktdata en salarisbandbreedte
+
 Regels:
 1. Schrijf in correct Nederlands, gebruik 'je/jouw' (niet 'u')
 2. Max 150 woorden
 3. Professioneel maar informeel en persoonlijk
 4. Begin met een bedrijfsspecifiek inzicht (gebaseerd op de bedrijfsnaam en website)
-5. Noem 1-2 concrete AI-kansen relevant voor dit specifieke bedrijf
+5. Noem 1-2 concrete AI-kansen relevant voor dit specifieke bedrijf EN de sector
 6. Eindig met een CTA: gratis consult boeken via https://www.praedix-ai-scan.com/consult
 7. Onderteken met: Met vriendelijke groet,\nHet Praedix team
 8. Gebruik GEEN markdown formatting (geen **, geen ##, geen bullets)
-9. Schrijf de email als plain text met alinea's gescheiden door lege regels`;
+9. Schrijf de email als plain text met alinea's gescheiden door lege regels
+
+BELANGRIJK — Formatteer je output EXACT als volgt:
+ONDERWERP: [het onderwerp van de email]
+
+BODY:
+[de volledige email tekst]`;
 
 interface Lead {
   bedrijfsnaam: string;
@@ -109,20 +125,24 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   for (const lead of batch) {
     try {
       // 1. Genereer email met Claude
+      const sectorLabel = lead.categorie || "E-commerce";
       const message = await claude.messages.create({
-        model: "claude-sonnet-4-20250514",
+        model: "claude-haiku-4-5-20251001",
         max_tokens: 1024,
         system: SYSTEM_PROMPT,
         messages: [
           {
             role: "user",
-            content: `Schrijf een koude acquisitie email voor dit e-commerce bedrijf:\n\nBedrijfsnaam: ${lead.bedrijfsnaam}\nWebsite: ${lead.website || "onbekend"}\nStad: ${lead.stad || "onbekend"}\nCategorie: ${lead.categorie || "E-commerce"}\nSub-categorie: ${lead.subCategorie || ""}`,
+            content: `Schrijf een koude acquisitie email voor dit ${sectorLabel} bedrijf:\n\nBedrijfsnaam: ${lead.bedrijfsnaam}\nWebsite: ${lead.website || "onbekend"}\nStad: ${lead.stad || "onbekend"}\nCategorie: ${sectorLabel}\nSub-categorie: ${lead.subCategorie || ""}`,
           },
         ],
       });
 
-      const text =
-        message.content[0].type === "text" ? message.content[0].text : "";
+      const textBlock = message.content.find((b) => b.type === "text");
+      if (!textBlock || textBlock.type !== "text" || !textBlock.text.trim()) {
+        throw new Error("Claude gaf geen bruikbaar antwoord terug");
+      }
+      const text = textBlock.text;
 
       // Parse onderwerp en body
       const subjectMatch = text.match(/ONDERWERP:\s*(.+)/);
