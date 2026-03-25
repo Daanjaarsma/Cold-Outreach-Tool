@@ -1,4 +1,4 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, Component, type ReactNode } from "react";
 import { useQuery, useMutation } from "convex/react";
 import { api } from "../convex/_generated/api";
 import { PasswordGate } from "./components/PasswordGate";
@@ -6,6 +6,45 @@ import { StatsOverzicht } from "./components/StatsOverzicht";
 import { LeadZoekForm } from "./components/LeadZoekForm";
 import { LeadsResultaat } from "./components/LeadsResultaat";
 import { berekenLeadScore } from "./lib/utils";
+
+class DashboardErrorBoundary extends Component<
+  { children: ReactNode },
+  { error: Error | null }
+> {
+  state = { error: null as Error | null };
+
+  static getDerivedStateFromError(error: Error) {
+    return { error };
+  }
+
+  render() {
+    if (this.state.error) {
+      const isConvexError = this.state.error.message.includes("CONVEX");
+      return (
+        <div className="min-h-screen flex items-center justify-center p-4">
+          <div className="w-full max-w-md bg-white/[0.03] border border-white/[0.06] rounded-2xl p-8 flex flex-col items-center gap-4">
+            <div className="text-[#31edae] text-2xl">⚠</div>
+            <h2 className="text-white font-semibold">
+              {isConvexError ? "Database verbinding mislukt" : "Er ging iets mis"}
+            </h2>
+            <p className="text-white/50 text-sm text-center">
+              {isConvexError
+                ? "Convex functies zijn niet beschikbaar. Probeer de pagina opnieuw te laden."
+                : this.state.error.message}
+            </p>
+            <button
+              onClick={() => window.location.reload()}
+              className="px-5 py-2.5 rounded-xl bg-[#31edae] text-black font-semibold hover:bg-[#28c896] transition-colors cursor-pointer"
+            >
+              Opnieuw laden
+            </button>
+          </div>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
 
 function Dashboard() {
   const [isLoading, setIsLoading] = useState(false);
@@ -185,7 +224,11 @@ function App() {
     return <PasswordGate onAuth={() => setIsAuthed(true)} />;
   }
 
-  return <Dashboard />;
+  return (
+    <DashboardErrorBoundary>
+      <Dashboard />
+    </DashboardErrorBoundary>
+  );
 }
 
 export default App;
