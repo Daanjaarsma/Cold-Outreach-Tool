@@ -9,6 +9,7 @@ export default defineSchema({
     stad: v.optional(v.string()),
     telefoon: v.optional(v.string()),
     email: v.optional(v.string()),
+    emailBron: v.optional(v.string()), // "scraped" | "fallback"
     website: v.optional(v.string()),
     reviewScore: v.optional(v.number()),
     reviewCount: v.optional(v.number()),
@@ -22,11 +23,13 @@ export default defineSchema({
     bron: v.string(), // "zoektool" | "csv-import" | "handmatig"
     verwijderd: v.boolean(),
     verwijderdOp: v.optional(v.number()),
+    placeId: v.optional(v.string()), // Google Maps place ID voor deduplicatie
   })
     .index("by_sector", ["sector", "verwijderd"])
     .index("by_status", ["status", "verwijderd"])
     .index("by_email", ["email"])
-    .index("by_verwijderd", ["verwijderd"]),
+    .index("by_verwijderd", ["verwijderd"])
+    .index("by_placeId", ["placeId"]),
 
   outreachLog: defineTable({
     leadId: v.id("leads"),

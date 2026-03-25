@@ -40,6 +40,19 @@ export const stats = query({
   },
 });
 
+// Query om alle bestaande placeIds op te halen (voor API-level dedup)
+export const getPlaceIds = query({
+  args: {},
+  handler: async (ctx) => {
+    const leads = await ctx.db.query("leads").collect();
+    const placeIds: string[] = [];
+    for (const l of leads) {
+      if (l.placeId) placeIds.push(l.placeId);
+    }
+    return placeIds;
+  },
+});
+
 export const save = mutation({
   args: {
     bedrijfsnaam: v.string(),
@@ -48,6 +61,7 @@ export const save = mutation({
     stad: v.optional(v.string()),
     telefoon: v.optional(v.string()),
     email: v.optional(v.string()),
+    emailBron: v.optional(v.string()),
     website: v.optional(v.string()),
     reviewScore: v.optional(v.number()),
     reviewCount: v.optional(v.number()),
@@ -76,6 +90,7 @@ export const saveBatch = mutation({
         stad: v.optional(v.string()),
         telefoon: v.optional(v.string()),
         email: v.optional(v.string()),
+        emailBron: v.optional(v.string()),
         website: v.optional(v.string()),
         reviewScore: v.optional(v.number()),
         reviewCount: v.optional(v.number()),
@@ -83,27 +98,57 @@ export const saveBatch = mutation({
         leadScore: v.number(),
         sector: v.string(),
         bron: v.string(),
+        placeId: v.optional(v.string()),
       })
     ),
   },
   handler: async (ctx, { leads }) => {
-    // Haal bestaande leads op voor deduplicatie
-    const bestaande = await ctx.db
-      .query("leads")
-      .withIndex("by_verwijderd", (q) => q.eq("verwijderd", false))
-      .collect();
+    const bestaande = await ctx.db.query("leads").collect();
 
+    // Dedup sets: placeId, naam+email/stad, en domein
+    const bestaandePlaceIds = new Set<string>();
     const bestaandeKeys = new Set<string>();
+    const bestaandeDomeinen = new Set<string>();
+
     for (const l of bestaande) {
+      if (l.placeId) bestaandePlaceIds.add(l.placeId);
       const naam = l.bedrijfsnaam.toLowerCase().trim();
       if (l.email) bestaandeKeys.add(`${naam}||${l.email.toLowerCase().trim()}`);
       if (l.stad) bestaandeKeys.add(`${naam}||stad:${l.stad.toLowerCase().trim()}`);
+      // Domein-dedup
+      if (l.website) {
+        try {
+          const u = l.website.startsWith("http") ? l.website : `https://${l.website}`;
+          const domain = new URL(u).hostname.replace(/^www\./, "").toLowerCase();
+          if (domain) bestaandeDomeinen.add(domain);
+        } catch { /* skip */ }
+      }
     }
 
     let nieuwe = 0;
     let overgeslagen = 0;
 
     for (const lead of leads) {
+      // Check 1: placeId
+      if (lead.placeId && bestaandePlaceIds.has(lead.placeId)) {
+        overgeslagen++;
+        continue;
+      }
+
+      // Check 2: domein-dedup (cross-bron)
+      if (lead.website) {
+        try {
+          const u = lead.website.startsWith("http") ? lead.website : `https://${lead.website}`;
+          const domain = new URL(u).hostname.replace(/^www\./, "").toLowerCase();
+          if (domain && bestaandeDomeinen.has(domain)) {
+            overgeslagen++;
+            continue;
+          }
+          if (domain) bestaandeDomeinen.add(domain);
+        } catch { /* skip */ }
+      }
+
+      // Check 3: naam+email/stad fallback
       const naam = lead.bedrijfsnaam.toLowerCase().trim();
       const emailKey = lead.email ? `${naam}||${lead.email.toLowerCase().trim()}` : null;
       const stadKey = lead.stad ? `${naam}||stad:${lead.stad.toLowerCase().trim()}` : null;
@@ -116,6 +161,7 @@ export const saveBatch = mutation({
         continue;
       }
 
+      if (lead.placeId) bestaandePlaceIds.add(lead.placeId);
       if (emailKey) bestaandeKeys.add(emailKey);
       if (stadKey) bestaandeKeys.add(stadKey);
 

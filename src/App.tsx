@@ -7,15 +7,13 @@ import { LeadZoekForm } from "./components/LeadZoekForm";
 import { LeadsResultaat } from "./components/LeadsResultaat";
 import { berekenLeadScore } from "./lib/utils";
 
-function App() {
-  const [isAuthed, setIsAuthed] = useState(
-    () => sessionStorage.getItem("praedix_outreach_auth") === "true"
-  );
+function Dashboard() {
   const [isLoading, setIsLoading] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [error, setError] = useState<string | null>(null);
 
   const leads = useQuery(api.leads.list) ?? [];
+  const existingPlaceIds = useQuery(api.leads.getPlaceIds) ?? [];
   const saveBatch = useMutation(api.leads.saveBatch);
 
   const handleSearch = async (params: {
@@ -36,7 +34,10 @@ function App() {
         subSector: params.subSector || undefined,
         leadCount: params.leadCount,
         bedrijfsgrootte: params.bedrijfsgrootte || undefined,
+        excludePlaceIds: existingPlaceIds.length > 0 ? existingPlaceIds : undefined,
       };
+
+      console.log(`[SEARCH] Sector: ${params.sector}, Grootte: ${params.bedrijfsgrootte || "alle"}, Locatie: ${params.location}`);
 
       const response = await fetch("/api/scrape-leads", {
         method: "POST",
@@ -65,6 +66,7 @@ function App() {
           stad: l.city || l.stad || params.location,
           telefoon: l.telefoonnummer || l.phoneUnformatted || l.phone || l.telefoon || undefined,
           email: l.primaryEmail || l.email || undefined,
+          emailBron: l.emailBron || ((l.primaryEmail || l.email) ? "scraped" : undefined),
           website: l.website || undefined,
           reviewScore: l.reviewScore || undefined,
           reviewCount: l.reviewCount || undefined,
@@ -72,12 +74,16 @@ function App() {
           leadScore: berekenLeadScore({
             website: l.website,
             email: l.primaryEmail || l.email,
+            emailBron: l.emailBron,
             telefoon: l.telefoonnummer || l.phoneUnformatted || l.phone || l.telefoon,
             reviewScore: l.reviewScore,
             reviewCount: l.reviewCount,
+            categorie: l.categorie || l.categoryName,
+            sector: params.sector,
           }),
           sector: params.sector,
           bron: "zoektool" as const,
+          placeId: l.placeId || undefined,
         }));
 
       if (processedLeads.length > 0) {
@@ -111,10 +117,6 @@ function App() {
   const clearSelection = useCallback(() => {
     setSelectedIds(new Set());
   }, []);
-
-  if (!isAuthed) {
-    return <PasswordGate onAuth={() => setIsAuthed(true)} />;
-  }
 
   return (
     <div className="min-h-screen p-4 lg:p-6 max-w-[1400px] mx-auto flex flex-col gap-5">
@@ -172,6 +174,18 @@ function App() {
       </div>
     </div>
   );
+}
+
+function App() {
+  const [isAuthed, setIsAuthed] = useState(
+    () => sessionStorage.getItem("praedix_outreach_auth") === "true"
+  );
+
+  if (!isAuthed) {
+    return <PasswordGate onAuth={() => setIsAuthed(true)} />;
+  }
+
+  return <Dashboard />;
 }
 
 export default App;

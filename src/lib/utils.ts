@@ -17,12 +17,6 @@ export const SUB_SECTORS: Record<string, string[]> = {
   ],
 };
 
-// Map naar n8n webhook sector namen
-export const SECTOR_WEBHOOK_MAP: Record<string, string> = {
-  "e-commerce": "Retail & E-commerce",
-  recruitment: "Consulting", // Closest match in the existing 14 sectors
-};
-
 export const BEDRIJFSGROOTTES = ["1-10", "11-50", "51-200", "201-1000", "1000+"];
 
 export const STATUSES = [
@@ -47,21 +41,75 @@ export const formatDutchPhone = (phone: string): string => {
   return phone;
 };
 
+// Categorieën die goed passen bij e-commerce (B2C retail)
+// Opgeschoond: geen apotheken, bakkerijen, supermarkten (niet de doelgroep)
+const RELEVANTE_ECOMMERCE_CATEGORIEEN = [
+  "winkel", "kledingwinkel", "schoenenwinkel", "meubelwinkel", "speelgoedwinkel",
+  "elektronicawinkel", "dierenwinkel", "boekwinkel", "sportwinkel",
+  "juwelier", "parfumerie", "fietsenwinkel", "cadeauwinkel",
+  "woninginrichting", "webshop", "online winkel", "detailhandel",
+  "tuincentrum",
+];
+
+// Categorieën die duiden op een dienstverlener (niet een productverkoper)
+const NEGATIEVE_CATEGORIEEN = [
+  "marketingbureau", "reclamebureau", "webdesign", "adviesbureau",
+  "it-dienstverlening", "softwarebedrijf", "consultant", "digital agency",
+  "e-commerceservice", "internetbedrijf", "communicatiebureau",
+];
+
 export const berekenLeadScore = (lead: {
   website?: string | null;
   email?: string | null;
+  emailBron?: string | null;
   telefoon?: string | null;
   reviewScore?: number | null;
   reviewCount?: number | null;
+  categorie?: string | null;
+  sector?: string | null;
 }): number => {
-  let score = 20;
-  if (lead.website) score += 15;
-  if (lead.email) score += 20;
+  let score = 15;
+
+  // Contactgegevens (max 30)
+  if (lead.email) {
+    score += lead.emailBron === "fallback" ? 10 : 20; // Fallback = minder betrouwbaar
+  }
   if (lead.telefoon) score += 10;
-  if (lead.reviewScore && lead.reviewScore >= 4.0) score += 15;
-  else if (lead.reviewScore && lead.reviewScore >= 3.5) score += 7;
-  if (lead.reviewCount && lead.reviewCount > 10) score += 10;
-  return Math.min(score, 100);
+
+  // Online aanwezigheid (max 20)
+  if (lead.website) {
+    score += 10;
+    const site = lead.website.toLowerCase();
+    const isEigenDomein = !site.includes("facebook.com") && !site.includes("instagram.com")
+      && !site.includes("bol.com") && !site.includes("amazon") && !site.includes("etsy.com");
+    if (isEigenDomein) score += 5;
+  }
+
+  // Reviews (max 20)
+  if (lead.reviewScore && lead.reviewScore >= 4.0) score += 12;
+  else if (lead.reviewScore && lead.reviewScore >= 3.5) score += 6;
+  if (lead.reviewCount && lead.reviewCount > 10) score += 8;
+
+  // Categorie relevantie (max 15) + Shopify bonus
+  if (lead.categorie && lead.sector === "e-commerce") {
+    const cat = lead.categorie.toLowerCase();
+
+    // Shopify-bron bonus (gevalideerde webshop)
+    if (cat.includes("shopify")) score += 10;
+
+    const isRelevant = RELEVANTE_ECOMMERCE_CATEGORIEEN.some((r) => cat.includes(r));
+    if (isRelevant) score += 15;
+
+    // Negatieve signalen: dienstverlener penalty
+    if (NEGATIEVE_CATEGORIEEN.some((n) => cat.includes(n))) score -= 25;
+  } else if (lead.categorie && lead.sector === "recruitment") {
+    const cat = lead.categorie.toLowerCase();
+    const isRelevant = cat.includes("uitzend") || cat.includes("werving") || cat.includes("recruitment")
+      || cat.includes("detachering") || cat.includes("hr") || cat.includes("personeel");
+    if (isRelevant) score += 15;
+  }
+
+  return Math.max(0, Math.min(score, 100));
 };
 
 export const generateCSV = (leads: any[]): void => {
